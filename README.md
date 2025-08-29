@@ -2,10 +2,11 @@
 
 A simple localization framework that can re-localize in built maps based on [FAST-LIO](https://github.com/hku-mars/FAST_LIO). 
 
+
 ## News
 
+- **2025-08-29:** Major update: Migrated to **Python 3.8+**, upgraded **Open3D** to v0.16.0, removed `ros_numpy`, and replaced `livox_ros_driver` with **livox_ros_driver2**. All build and run instructions are updated accordingly. If you are migrating from an older setup, please review the new environment and dependency requirements below.
 - **2021-08-11:** Add **Open3D 0.7** support.
-  
 - **2021-08-09:** Migrate to **Open3D** for better performance.
 
 ## 1. Features
@@ -28,57 +29,45 @@ A simple localization framework that can re-localize in built maps based on [FAS
 </div>
 
 
+
 ## 2. Prerequisites
-### 2.1 Dependencies for FAST-LIO
 
-Technically, if you have built and run FAST-LIO before, you may skip section 2.1.
+### Dependencies
 
-This part of dependency is consistent with FAST-LIO, please refer to the documentation https://github.com/hku-mars/FAST_LIO#1-prerequisites
-
-### 2.2 Dependencies for localization module
-
-- python 2.7
-
-- [ros_numpy](https://github.com/eric-wieser/ros_numpy)
+- Python 3.8+
+- [Open3D](http://www.open3d.org/docs/release/getting_started.html) (version 0.16.0 recommended)
 
 ```shell
-sudo apt install ros-$ROS_DISTRO-ros-numpy
+pip install open3d==0.16.0
 ```
 
-- [Open3D](http://www.open3d.org/docs/0.9.0/getting_started.html)
 
-```shell
-pip install open3d==0.9
-```
+**Note:** The codebase now requires Python 3.8 or newer. `ros_numpy` is no longer required or used. All dependencies and code are updated for modern Open3D APIs.
 
-Notice that, there may be issue when installing **Open3D** directly using pip in **Python2.7**: 
-```shell
-ERROR: Package 'pyrsistent' requires a different Python: 2.7.18 not in '>=3.5'
-```
-you may firstly install **pyrsistent**:
-```shell
-pip install pyrsistent==0.15
-```
-Then
-```shell
-pip install open3d==0.9
-```
+If you encounter missing dependencies related to FAST-LIO, please refer to the [FAST-LIO documentation](https://github.com/hku-mars/FAST_LIO#1-prerequisites) for additional requirements that may be needed in your environment.
 
 
 ## 3. Build
-Clone the repository and catkin_make:
+
+Clone the repositories and build:
 
 ```
-    cd ~/$A_ROS_DIR$/src
-    git clone https://github.com/HViktorTsoi/FAST_LIO_LOCALIZATION.git
-    cd FAST_LIO_LOCALIZATION
-    git submodule update --init
-    cd ../..
-    catkin_make
-    source devel/setup.bash
+# Clone packages to your catkin workspace src directory
+git clone https://github.com/Livox-SDK/livox_ros_driver2.git
+git clone https://github.com/HViktorTsoi/FAST_LIO_LOCALIZATION.git
+(cd FAST_LIO_LOCALIZATION && git submodule update --init)
+
+# Build livox_ros_driver2
+(cd livox_ros_driver2 && ./build.sh ROS1)
+
+# Go back to workspace root and build everything
+cd ../..
+catkin_make
+source devel/setup.bash
 ```
-- Remember to source the livox_ros_driver before build (follow [livox_ros_driver](https://github.com/hku-mars/FAST_LIO#13-livox_ros_driver))
-- If you want to use a custom build of PCL, add the following line to ~/.bashrc
+
+- **livox_ros_driver2** is now required (instead of livox_ros_driver). Make sure to update any references in `package.xml`, `CMakeLists.txt`, and source files if you are migrating from an older setup.
+- If you want to use a custom build of PCL, add the following line to your `~/.bashrc`:
   ```export PCL_ROOT={CUSTOM_PCL_PATH}```
 
 
@@ -94,7 +83,9 @@ The map can be built using LIO-SAM or FAST-LIO-SLAM.
 
 ### 4.2 Run
 
-1. First, please make sure you're using the **Python 2.7** environment;
+
+1. First, please make sure you're using the **Python 3.8** environment;
+
 
 
 2. Run localization, here we take Livox AVIA as an example:
@@ -107,6 +98,7 @@ Please modify `/path/to/your/map.pcd` to your own map point cloud file path.
 
 Wait for 3~5 seconds until the map cloud shows up in RVIZ;
 
+
 3. If you are testing with the sample rosbag data:
 ```shell
 rosbag play localization_test_scene_1.bag
@@ -115,10 +107,11 @@ rosbag play localization_test_scene_1.bag
 Or if you are running realtime
 
 ```shell
-roslaunch livox_ros_driver livox_lidar_msg.launch
+roslaunch livox_ros_driver2 msg_mixed.launch
 ```
 Please set the **publish_freq** in **livox_lidar_rviz.launch** to **10Hz**, to ensure there are enough points for global localization in a single scan. 
 Support for higher frequency is coming soon.
+
 
 4. Provide initial pose
 ```shell
@@ -129,7 +122,7 @@ which is a rough initial guess for **localization_test_scene_1.bag**.
 
 The initial guess can also be provided by the '2D Pose Estimate' Tool in RVIZ.
 
-Note that, during the initialization stage, it's better to keep the robot still. Or if you play bags, fistly play the bag for about 0.5s, and then pause the bag until the initialization succeed. 
+Note that, during the initialization stage, it's better to keep the robot still. Or if you play bags, firstly play the bag for about 0.5s, and then pause the bag until the initialization succeeds. 
 
 
 ## Related Works

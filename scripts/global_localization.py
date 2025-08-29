@@ -1,14 +1,14 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # coding=utf8
 from __future__ import print_function, division, absolute_import
 
 import copy
-import thread
+import threading
 import time
 
 import open3d as o3d
 import rospy
-import ros_numpy
+import struct
 from geometry_msgs.msg import PoseWithCovarianceStamped, Pose, Point, Quaternion
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import PointCloud2
@@ -30,21 +30,26 @@ def pose_to_mat(pose_msg):
     )
 
 
+
+# Helper to convert PointCloud2 to numpy array (x, y, z)
 def msg_to_array(pc_msg):
-    pc_array = ros_numpy.numpify(pc_msg)
-    pc = np.zeros([len(pc_array), 3])
-    pc[:, 0] = pc_array['x']
-    pc[:, 1] = pc_array['y']
-    pc[:, 2] = pc_array['z']
-    return pc
+    fmt = 'fff'  # x, y, z as float32
+    step = struct.calcsize(fmt)
+    points = []
+    for i in range(pc_msg.width * pc_msg.height):
+        offset = i * pc_msg.point_step
+        x, y, z = struct.unpack_from(fmt, pc_msg.data, offset)
+        points.append([x, y, z])
+    return np.array(points)
 
 
 def registration_at_scale(pc_scan, pc_map, initial, scale):
-    result_icp = o3d.registration.registration_icp(
+    reg = o3d.pipelines.registration
+    result_icp = reg.registration_icp(
         voxel_down_sample(pc_scan, SCAN_VOXEL_SIZE * scale), voxel_down_sample(pc_map, MAP_VOXEL_SIZE * scale),
         1.0 * scale, initial,
-        o3d.registration.TransformationEstimationPointToPoint(),
-        o3d.registration.ICPConvergenceCriteria(max_iteration=20)
+        reg.TransformationEstimationPointToPoint(),
+        reg.ICPConvergenceCriteria(max_iteration=20)
     )
 
     return result_icp.transformation, result_icp.fitness
@@ -59,20 +64,24 @@ def inverse_se3(trans):
     return trans_inverse
 
 
+
+# Helper to publish numpy point cloud as PointCloud2
 def publish_point_cloud(publisher, header, pc):
-    data = np.zeros(len(pc), dtype=[
-        ('x', np.float32),
-        ('y', np.float32),
-        ('z', np.float32),
-        ('intensity', np.float32),
-    ])
-    data['x'] = pc[:, 0]
-    data['y'] = pc[:, 1]
-    data['z'] = pc[:, 2]
-    if pc.shape[1] == 4:
-        data['intensity'] = pc[:, 3]
-    msg = ros_numpy.msgify(PointCloud2, data)
+    from sensor_msgs.msg import PointField
+    msg = PointCloud2()
     msg.header = header
+    msg.height = 1
+    msg.width = pc.shape[0]
+    msg.fields = [
+        PointField('x', 0, PointField.FLOAT32, 1),
+        PointField('y', 4, PointField.FLOAT32, 1),
+        PointField('z', 8, PointField.FLOAT32, 1),
+    ]
+    msg.is_bigendian = False
+    msg.point_step = 12
+    msg.row_step = msg.point_step * pc.shape[0]
+    msg.is_dense = True
+    msg.data = pc.astype(np.float32).tobytes()
     publisher.publish(msg)
 
 
@@ -189,11 +198,8 @@ def cb_save_cur_scan(pc_msg):
 
     # 转换为pcd
     # fastlio给的field有问题 处理一下
-    pc_msg.fields = [pc_msg.fields[0], pc_msg.fields[1], pc_msg.fields[2],
-                     pc_msg.fields[4], pc_msg.fields[5], pc_msg.fields[6],
-                     pc_msg.fields[3], pc_msg.fields[7]]
+    # (skip field reordering, just extract x,y,z)
     pc = msg_to_array(pc_msg)
-
     cur_scan = o3d.geometry.PointCloud()
     cur_scan.points = o3d.utility.Vector3dVector(pc[:, :3])
 
@@ -255,6 +261,6 @@ if __name__ == '__main__':
     rospy.loginfo('Initialize successfully!!!!!!')
     rospy.loginfo('')
     # 开始定期全局定位
-    thread.start_new_thread(thread_localization, ())
+    threading.Thread(target=thread_localization, daemon=True).start()
 
     rospy.spin()
